@@ -1,4 +1,4 @@
-from keepitdry.parser import CodeElement, parse_file
+from keepitdry.parser import CodeElement, chunk_elements, parse_file, TOKEN_THRESHOLD
 
 
 def test_parse_simple_function(tmp_path):
@@ -143,3 +143,72 @@ def test_parse_full_file(tmp_path):
     assert "class" in types
     assert "method" in types
     assert len(elements) == 4
+
+
+def test_small_element_not_chunked():
+    el = CodeElement(
+        file_path="f.py",
+        element_name="small",
+        element_type="function",
+        signature="def small()",
+        docstring=None,
+        code_body="def small():\n    return 1",
+        line_number=1,
+        parent_chain="f.py",
+    )
+
+    result = chunk_elements([el])
+    assert len(result) == 1
+    assert result[0] is el
+
+
+def test_large_class_is_chunked(tmp_path):
+    # Build a class with many methods that exceeds TOKEN_THRESHOLD
+    methods = []
+    for i in range(30):
+        methods.append(
+            f"    def method_{i}(self):\n"
+            f"        # This is method number {i} with enough text to add tokens\n"
+            f"        value = {i} * 2 + {i}\n"
+            f"        return value\n"
+        )
+    class_code = "class BigClass:\n" + "\n".join(methods)
+
+    f = tmp_path / "big.py"
+    f.write_text(class_code)
+
+    elements = parse_file(f, project_root=tmp_path)
+    chunked = chunk_elements(elements)
+
+    # Methods should remain as individual elements
+    methods_out = [e for e in chunked if e.element_type == "method"]
+    assert len(methods_out) == 30
+
+    # The class itself should be replaced with a signature-only summary
+    # (since it exceeds the threshold)
+    class_els = [e for e in chunked if e.element_type == "class"]
+    assert len(class_els) == 1
+    # The summary should NOT contain all 30 method bodies
+    assert len(class_els[0].code_body) < len(class_code)
+
+
+def test_chunk_preserves_parent_context():
+    # Build a function body that definitely exceeds _CHAR_THRESHOLD (1600 chars)
+    body = "    x = 1\n" * 200  # 2000 chars
+    el = CodeElement(
+        file_path="mod.py",
+        element_name="BigFunc",
+        element_type="function",
+        signature="def BigFunc()",
+        docstring=None,
+        code_body="def BigFunc():\n" + body,
+        line_number=1,
+        parent_chain="mod.py",
+    )
+
+    result = chunk_elements([el])
+
+    assert len(result) > 1, "Expected the function to be chunked"
+    for chunk in result:
+        assert chunk.parent_chain == "mod.py"
+        assert "BigFunc" in chunk.element_name

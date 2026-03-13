@@ -209,6 +209,88 @@ def _extract_assignment(node, file_path: str, parent_chain: str, elements: list)
     ))
 
 
+# ~400 tokens ~ 1600 chars (rough 4 chars/token heuristic for code)
+TOKEN_THRESHOLD = 400
+_CHAR_THRESHOLD = TOKEN_THRESHOLD * 4
+
+
+def chunk_elements(elements: list[CodeElement]) -> list[CodeElement]:
+    """Split oversized elements into smaller chunks.
+
+    Small elements pass through unchanged. Large functions are split by
+    line boundaries. Large classes are replaced by a signature-only summary
+    (methods are already extracted separately).
+    """
+    result = []
+    for el in elements:
+        if len(el.code_body) <= _CHAR_THRESHOLD:
+            result.append(el)
+            continue
+
+        if el.element_type == "class":
+            # Class body is too large -- keep a signature-only summary.
+            # Methods are already extracted as separate elements.
+            summary = el.signature + (":" if not el.signature.endswith(":") else "")
+            if el.docstring:
+                summary += f'\n    """{el.docstring}"""'
+            result.append(CodeElement(
+                file_path=el.file_path,
+                element_name=el.element_name,
+                element_type=el.element_type,
+                signature=el.signature,
+                docstring=el.docstring,
+                code_body=summary,
+                line_number=el.line_number,
+                parent_chain=el.parent_chain,
+            ))
+        elif el.element_type == "function":
+            # Split function body into chunks at line boundaries
+            lines = el.code_body.split("\n")
+            header = lines[0]  # def line
+            body_lines = lines[1:]
+
+            chunk_lines: list[str] = []
+            chunk_idx = 0
+            for line in body_lines:
+                chunk_lines.append(line)
+                current_text = header + "\n" + "\n".join(chunk_lines)
+                if len(current_text) >= _CHAR_THRESHOLD:
+                    result.append(CodeElement(
+                        file_path=el.file_path,
+                        element_name=f"{el.element_name}[chunk_{chunk_idx}]",
+                        element_type=el.element_type,
+                        signature=el.signature,
+                        docstring=el.docstring if chunk_idx == 0 else None,
+                        code_body=current_text,
+                        line_number=el.line_number,
+                        parent_chain=el.parent_chain,
+                    ))
+                    chunk_lines = []
+                    chunk_idx += 1
+
+            if chunk_lines:
+                current_text = header + "\n" + "\n".join(chunk_lines)
+                if chunk_idx == 0:
+                    # Didn't actually need chunking
+                    result.append(el)
+                else:
+                    result.append(CodeElement(
+                        file_path=el.file_path,
+                        element_name=f"{el.element_name}[chunk_{chunk_idx}]",
+                        element_type=el.element_type,
+                        signature=el.signature,
+                        docstring=None,
+                        code_body=current_text,
+                        line_number=el.line_number,
+                        parent_chain=el.parent_chain,
+                    ))
+        else:
+            # Variables or methods -- unlikely to exceed threshold, but pass through
+            result.append(el)
+
+    return result
+
+
 def parse_file(path: Path, project_root: Path) -> list[CodeElement]:
     """Parse a Python file and extract code elements."""
     source = path.read_bytes()
