@@ -88,6 +88,91 @@ def _extract_functions(root, file_path: str, parent_chain: str) -> list[CodeElem
     return elements
 
 
+def _extract_class_signature(node) -> str:
+    """Extract the class signature line (e.g. 'class Name(Base)')."""
+    text = node.text.decode("utf8")
+    first_line = text.split("\n")[0]
+    if first_line.rstrip().endswith(":"):
+        return first_line.rstrip()[:-1].strip()
+    return first_line.strip()
+
+
+def _extract_classes(root, file_path: str, parent_chain: str) -> list[CodeElement]:
+    """Extract class definitions and their methods from direct children of root."""
+    elements = []
+    for child in root.children:
+        node = child
+        # Unwrap decorated definitions
+        if node.type == "decorated_definition":
+            for sub in node.children:
+                if sub.type == "class_definition":
+                    node = sub
+                    break
+            else:
+                continue
+
+        if node.type != "class_definition":
+            continue
+
+        name_node = node.child_by_field_name("name")
+        if not name_node:
+            continue
+
+        class_name = name_node.text.decode("utf8")
+        body = node.child_by_field_name("body")
+
+        elements.append(
+            CodeElement(
+                file_path=file_path,
+                element_name=class_name,
+                element_type="class",
+                signature=_extract_class_signature(node),
+                docstring=_extract_docstring(body),
+                code_body=node.text.decode("utf8"),
+                line_number=node.start_point[0] + 1,
+                parent_chain=parent_chain,
+            )
+        )
+
+        # Extract methods from the class body
+        if body:
+            method_parent = f"{parent_chain} > {class_name}"
+            for body_child in body.children:
+                method_node = body_child
+                if method_node.type == "decorated_definition":
+                    for sub in method_node.children:
+                        if sub.type == "function_definition":
+                            method_node = sub
+                            break
+                    else:
+                        continue
+
+                if method_node.type != "function_definition":
+                    continue
+
+                method_name_node = method_node.child_by_field_name("name")
+                if not method_name_node:
+                    continue
+
+                method_name = method_name_node.text.decode("utf8")
+                method_body = method_node.child_by_field_name("body")
+
+                elements.append(
+                    CodeElement(
+                        file_path=file_path,
+                        element_name=f"{class_name}.{method_name}",
+                        element_type="method",
+                        signature=_extract_signature(method_node),
+                        docstring=_extract_docstring(method_body),
+                        code_body=method_node.text.decode("utf8"),
+                        line_number=method_node.start_point[0] + 1,
+                        parent_chain=method_parent,
+                    )
+                )
+
+    return elements
+
+
 def parse_file(path: Path, project_root: Path) -> list[CodeElement]:
     """Parse a Python file and extract code elements."""
     source = path.read_bytes()
@@ -99,5 +184,6 @@ def parse_file(path: Path, project_root: Path) -> list[CodeElement]:
 
     elements = []
     elements.extend(_extract_functions(root, rel_path, parent_chain))
+    elements.extend(_extract_classes(root, rel_path, parent_chain))
 
     return elements
