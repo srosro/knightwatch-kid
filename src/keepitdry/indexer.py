@@ -28,29 +28,39 @@ def discover_python_files(root: Path) -> list[Path]:
 
 
 class FileHashTracker:
-    """Track file content hashes for incremental indexing."""
+    """Track file content hashes for incremental indexing.
 
-    def __init__(self, path: Path):
+    Keys are relative paths (relative to project root) to ensure
+    portability across machines and directory relocations.
+    """
+
+    def __init__(self, path: Path, project_root: Path | None = None):
         self._path = path
+        self._root = project_root
         self._hashes: dict[str, str] = {}
         if path.exists():
             self._hashes = json.loads(path.read_text())
+
+    def _key(self, file_path: Path) -> str:
+        if self._root:
+            return str(file_path.relative_to(self._root))
+        return str(file_path)
 
     def _compute_hash(self, file_path: Path) -> str:
         return hashlib.sha256(file_path.read_bytes()).hexdigest()
 
     def has_changed(self, file_path: Path) -> bool:
         current = self._compute_hash(file_path)
-        return self._hashes.get(str(file_path)) != current
+        return self._hashes.get(self._key(file_path)) != current
 
     def update(self, file_path: Path) -> None:
-        self._hashes[str(file_path)] = self._compute_hash(file_path)
+        self._hashes[self._key(file_path)] = self._compute_hash(file_path)
 
-    def remove(self, file_path: str) -> None:
-        self._hashes.pop(file_path, None)
+    def remove(self, key: str) -> None:
+        self._hashes.pop(key, None)
 
-    def stale_files(self, current_files: set[str]) -> list[str]:
-        return [f for f in self._hashes if f not in current_files]
+    def stale_files(self, current_keys: set[str]) -> list[str]:
+        return [f for f in self._hashes if f not in current_keys]
 
     def save(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -64,21 +74,23 @@ class Indexer:
         self.root = project_root
         self.db_path = project_root / ".keepitdry"
         self.store = Store(self.db_path)
-        self._tracker = FileHashTracker(self.db_path / "file_hashes.json")
+        self._tracker = FileHashTracker(
+            self.db_path / "file_hashes.json", project_root=self.root
+        )
 
     def index(self, clear: bool = False) -> dict:
         if clear:
             self.clear()
 
         py_files = discover_python_files(self.root)
-        current_paths = {str(f) for f in py_files}
+        # Keys are relative paths (matching how tracker stores them)
+        current_keys = {str(f.relative_to(self.root)) for f in py_files}
 
         # Remove stale entries
-        stale = self._tracker.stale_files(current_paths)
-        for stale_path in stale:
-            rel = str(Path(stale_path).relative_to(self.root))
-            self.store.delete_by_file(rel)
-            self._tracker.remove(stale_path)
+        stale = self._tracker.stale_files(current_keys)
+        for stale_key in stale:
+            self.store.delete_by_file(stale_key)
+            self._tracker.remove(stale_key)
 
         files_indexed = 0
         files_skipped = 0
@@ -138,7 +150,9 @@ class Indexer:
 
     def clear(self) -> None:
         self.store.clear()
-        self._tracker = FileHashTracker(self.db_path / "file_hashes.json")
+        self._tracker = FileHashTracker(
+            self.db_path / "file_hashes.json", project_root=self.root
+        )
         if (self.db_path / "file_hashes.json").exists():
             (self.db_path / "file_hashes.json").unlink()
 

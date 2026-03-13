@@ -23,6 +23,6 @@ Requires `kid` CLI installed (`pip install keepitdry`) and Ollama running locall
 - `kid index [path]` — Index a project (incremental, fast on re-runs)
 - `kid find "query"` — Search for similar code
 - `kid find "query" --type function` — Filter by element type
-- `kid find "query" --file "api/*.py"` — Filter by file path
+- `kid find "query" --file "api/routes.py"` — Filter by file path (exact match)
 - `kid stats` — Show index info
 - `kid clean` — Remove index

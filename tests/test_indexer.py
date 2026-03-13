@@ -46,7 +46,9 @@ def test_discover_nested_files(tmp_path):
 
 
 def test_hash_tracker_detects_new_files(tmp_path):
-    tracker = FileHashTracker(tmp_path / ".keepitdry" / "file_hashes.json")
+    tracker = FileHashTracker(
+        tmp_path / ".keepitdry" / "file_hashes.json", project_root=tmp_path
+    )
     f = tmp_path / "new.py"
     f.write_text("x = 1")
 
@@ -54,19 +56,25 @@ def test_hash_tracker_detects_new_files(tmp_path):
 
 
 def test_hash_tracker_detects_unchanged(tmp_path):
-    tracker = FileHashTracker(tmp_path / ".keepitdry" / "file_hashes.json")
+    tracker = FileHashTracker(
+        tmp_path / ".keepitdry" / "file_hashes.json", project_root=tmp_path
+    )
     f = tmp_path / "stable.py"
     f.write_text("x = 1")
 
     tracker.update(f)
     tracker.save()
 
-    tracker2 = FileHashTracker(tmp_path / ".keepitdry" / "file_hashes.json")
+    tracker2 = FileHashTracker(
+        tmp_path / ".keepitdry" / "file_hashes.json", project_root=tmp_path
+    )
     assert not tracker2.has_changed(f)
 
 
 def test_hash_tracker_detects_modified(tmp_path):
-    tracker = FileHashTracker(tmp_path / ".keepitdry" / "file_hashes.json")
+    tracker = FileHashTracker(
+        tmp_path / ".keepitdry" / "file_hashes.json", project_root=tmp_path
+    )
     f = tmp_path / "mod.py"
     f.write_text("x = 1")
     tracker.update(f)
@@ -74,12 +82,16 @@ def test_hash_tracker_detects_modified(tmp_path):
 
     f.write_text("x = 2")
 
-    tracker2 = FileHashTracker(tmp_path / ".keepitdry" / "file_hashes.json")
+    tracker2 = FileHashTracker(
+        tmp_path / ".keepitdry" / "file_hashes.json", project_root=tmp_path
+    )
     assert tracker2.has_changed(f)
 
 
 def test_hash_tracker_stale_files(tmp_path):
-    tracker = FileHashTracker(tmp_path / ".keepitdry" / "file_hashes.json")
+    tracker = FileHashTracker(
+        tmp_path / ".keepitdry" / "file_hashes.json", project_root=tmp_path
+    )
 
     f1 = tmp_path / "keep.py"
     f1.write_text("x = 1")
@@ -90,11 +102,12 @@ def test_hash_tracker_stale_files(tmp_path):
     tracker.update(f2)
     tracker.save()
 
-    current_files = {str(f1)}
-    stale = tracker.stale_files(current_files)
+    # Keys are relative paths now
+    current_keys = {"keep.py"}
+    stale = tracker.stale_files(current_keys)
 
-    assert str(f2) in stale
-    assert str(f1) not in stale
+    assert "delete.py" in stale
+    assert "keep.py" not in stale
 
 
 def test_indexer_indexes_project(tmp_path, fake_embed):

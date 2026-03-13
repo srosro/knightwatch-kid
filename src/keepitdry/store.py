@@ -47,9 +47,13 @@ class Store:
         where: dict | None = None,
     ) -> list[dict]:
         """Search for similar elements. Returns list of result dicts."""
+        n = self.count()
+        if n == 0:
+            return []
+
         kwargs: dict = {
             "query_embeddings": [query_embedding],
-            "n_results": min(limit, self.count()) if self.count() > 0 else limit,
+            "n_results": min(limit, n),
         }
         if where:
             kwargs["where"] = where

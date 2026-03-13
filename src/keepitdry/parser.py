@@ -52,6 +52,7 @@ def _extract_functions(root, file_path: str, parent_chain: str) -> list[CodeElem
     """Extract function definitions from direct children of root."""
     elements = []
     for child in root.children:
+        outer = child  # may be decorated_definition
         node = child
         # Unwrap decorated definitions
         if node.type == "decorated_definition":
@@ -79,8 +80,8 @@ def _extract_functions(root, file_path: str, parent_chain: str) -> list[CodeElem
                 element_type="function",
                 signature=_extract_signature(node),
                 docstring=_extract_docstring(body),
-                code_body=node.text.decode("utf8"),
-                line_number=node.start_point[0] + 1,
+                code_body=outer.text.decode("utf8"),  # includes decorators
+                line_number=outer.start_point[0] + 1,
                 parent_chain=parent_chain,
             )
         )
@@ -101,6 +102,7 @@ def _extract_classes(root, file_path: str, parent_chain: str) -> list[CodeElemen
     """Extract class definitions and their methods from direct children of root."""
     elements = []
     for child in root.children:
+        outer = child  # may be decorated_definition
         node = child
         # Unwrap decorated definitions
         if node.type == "decorated_definition":
@@ -128,8 +130,8 @@ def _extract_classes(root, file_path: str, parent_chain: str) -> list[CodeElemen
                 element_type="class",
                 signature=_extract_class_signature(node),
                 docstring=_extract_docstring(body),
-                code_body=node.text.decode("utf8"),
-                line_number=node.start_point[0] + 1,
+                code_body=outer.text.decode("utf8"),  # includes decorators
+                line_number=outer.start_point[0] + 1,
                 parent_chain=parent_chain,
             )
         )
@@ -138,6 +140,7 @@ def _extract_classes(root, file_path: str, parent_chain: str) -> list[CodeElemen
         if body:
             method_parent = f"{parent_chain} > {class_name}"
             for body_child in body.children:
+                method_outer = body_child
                 method_node = body_child
                 if method_node.type == "decorated_definition":
                     for sub in method_node.children:
@@ -164,8 +167,8 @@ def _extract_classes(root, file_path: str, parent_chain: str) -> list[CodeElemen
                         element_type="method",
                         signature=_extract_signature(method_node),
                         docstring=_extract_docstring(method_body),
-                        code_body=method_node.text.decode("utf8"),
-                        line_number=method_node.start_point[0] + 1,
+                        code_body=method_outer.text.decode("utf8"),  # includes decorators
+                        line_number=method_outer.start_point[0] + 1,
                         parent_chain=method_parent,
                     )
                 )
