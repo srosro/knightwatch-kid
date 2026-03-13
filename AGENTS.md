@@ -16,7 +16,7 @@ keepitdry exists to enforce DRY codebases. Search before building — always.
 ## Scope
 
 - `src/keepitdry/` is the core library (parser, embeddings, store, indexer, searcher).
-- `cli/` is the `kid` CLI — a thin click wrapper over the library.
+- `src/keepitdry/cli.py` is the `kid` CLI — a thin click wrapper over the library.
 - `skill/` contains the Claude Code skill for marketplace publishing.
 - `tests/` contains all tests.
 - `docs/` contains design specs and architecture notes.
