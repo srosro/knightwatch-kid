@@ -9,6 +9,8 @@ from keepitdry.parser import CodeElement
 OLLAMA_BASE_URL = "http://localhost:11434"
 MODEL = "mxbai-embed-large"
 EMBEDDING_DIM = 1024
+# mxbai-embed-large has a 512-token context. Code tokenizes at ~3 chars/token.
+_MAX_EMBED_CHARS = 1400
 
 
 def build_searchable_text(element: CodeElement) -> str:
@@ -21,7 +23,10 @@ def build_searchable_text(element: CodeElement) -> str:
     if element.docstring:
         parts.append(element.docstring)
     parts.append(element.code_body)
-    return "\n".join(parts)
+    text = "\n".join(parts)
+    if len(text) > _MAX_EMBED_CHARS:
+        text = text[:_MAX_EMBED_CHARS]
+    return text
 
 
 class OllamaError(Exception):
@@ -51,12 +56,19 @@ def embed(text: str) -> list[float]:
     return resp.json()["embeddings"][0]
 
 
+_BATCH_SIZE = 10
+
+
 def batch_embed(texts: list[str]) -> list[list[float]]:
-    """Generate embeddings for multiple texts. Single API call."""
-    resp = requests.post(
-        f"{OLLAMA_BASE_URL}/api/embed",
-        json={"model": MODEL, "input": texts},
-        timeout=60,
-    )
-    resp.raise_for_status()
-    return resp.json()["embeddings"]
+    """Generate embeddings for multiple texts in batched API calls."""
+    all_embeddings = []
+    for i in range(0, len(texts), _BATCH_SIZE):
+        batch = texts[i : i + _BATCH_SIZE]
+        resp = requests.post(
+            f"{OLLAMA_BASE_URL}/api/embed",
+            json={"model": MODEL, "input": batch},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        all_embeddings.extend(resp.json()["embeddings"])
+    return all_embeddings
