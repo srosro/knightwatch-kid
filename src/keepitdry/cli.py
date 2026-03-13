@@ -73,5 +73,27 @@ def find(query: str, project: Path, limit: int, element_type: str | None, file_p
         click.echo(f"\n{preview}")
 
 
+@main.command()
+@click.option("--project", default=".", type=click.Path(exists=True, path_type=Path),
+              help="Project directory.")
+def stats(project: Path):
+    """Show index statistics."""
+    project = Path(project).resolve()
+    indexer = Indexer(project)
+    s = indexer.stats()
+    click.echo(f"Total elements: {s['total_elements']}")
+    click.echo(f"Index path: {s['db_path']}")
+
+
+@main.command()
+@click.argument("project", default=".", type=click.Path(exists=True, path_type=Path))
+def clean(project: Path):
+    """Remove the project index."""
+    project = project.resolve()
+    indexer = Indexer(project)
+    indexer.clear()
+    click.echo("Index cleaned.")
+
+
 if __name__ == "__main__":
     main()
