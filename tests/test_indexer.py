@@ -1,4 +1,4 @@
-from keepitdry.indexer import discover_python_files
+from keepitdry.indexer import discover_python_files, FileHashTracker
 
 
 def test_discover_python_files(tmp_path):
@@ -41,3 +41,55 @@ def test_discover_nested_files(tmp_path):
     names = [str(f.relative_to(tmp_path)) for f in files]
     assert "top.py" in names
     assert "pkg/sub/deep.py" in names
+
+
+def test_hash_tracker_detects_new_files(tmp_path):
+    tracker = FileHashTracker(tmp_path / ".keepitdry" / "file_hashes.json")
+    f = tmp_path / "new.py"
+    f.write_text("x = 1")
+
+    assert tracker.has_changed(f)
+
+
+def test_hash_tracker_detects_unchanged(tmp_path):
+    tracker = FileHashTracker(tmp_path / ".keepitdry" / "file_hashes.json")
+    f = tmp_path / "stable.py"
+    f.write_text("x = 1")
+
+    tracker.update(f)
+    tracker.save()
+
+    tracker2 = FileHashTracker(tmp_path / ".keepitdry" / "file_hashes.json")
+    assert not tracker2.has_changed(f)
+
+
+def test_hash_tracker_detects_modified(tmp_path):
+    tracker = FileHashTracker(tmp_path / ".keepitdry" / "file_hashes.json")
+    f = tmp_path / "mod.py"
+    f.write_text("x = 1")
+    tracker.update(f)
+    tracker.save()
+
+    f.write_text("x = 2")
+
+    tracker2 = FileHashTracker(tmp_path / ".keepitdry" / "file_hashes.json")
+    assert tracker2.has_changed(f)
+
+
+def test_hash_tracker_stale_files(tmp_path):
+    tracker = FileHashTracker(tmp_path / ".keepitdry" / "file_hashes.json")
+
+    f1 = tmp_path / "keep.py"
+    f1.write_text("x = 1")
+    f2 = tmp_path / "delete.py"
+    f2.write_text("y = 2")
+
+    tracker.update(f1)
+    tracker.update(f2)
+    tracker.save()
+
+    current_files = {str(f1)}
+    stale = tracker.stale_files(current_files)
+
+    assert str(f2) in stale
+    assert str(f1) not in stale
