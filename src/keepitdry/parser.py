@@ -173,6 +173,42 @@ def _extract_classes(root, file_path: str, parent_chain: str) -> list[CodeElemen
     return elements
 
 
+def _extract_variables(root, file_path: str, parent_chain: str) -> list[CodeElement]:
+    """Extract module-level variable assignments from direct children."""
+    elements = []
+    for child in root.children:
+        if child.type == "expression_statement":
+            for sub in child.children:
+                if sub.type == "assignment":
+                    _extract_assignment(sub, file_path, parent_chain, elements)
+
+    return elements
+
+
+def _extract_assignment(node, file_path: str, parent_chain: str, elements: list):
+    """Extract a single assignment as a variable CodeElement."""
+    left = node.child_by_field_name("left")
+    if not left:
+        return
+
+    # Only extract simple name assignments (not tuple unpacking, subscripts, etc.)
+    if left.type != "identifier":
+        return
+
+    name = left.text.decode("utf8")
+
+    elements.append(CodeElement(
+        file_path=file_path,
+        element_name=name,
+        element_type="variable",
+        signature=node.text.decode("utf8").split("\n")[0].strip(),
+        docstring=None,
+        code_body=node.text.decode("utf8"),
+        line_number=node.start_point[0] + 1,
+        parent_chain=parent_chain,
+    ))
+
+
 def parse_file(path: Path, project_root: Path) -> list[CodeElement]:
     """Parse a Python file and extract code elements."""
     source = path.read_bytes()
@@ -183,6 +219,7 @@ def parse_file(path: Path, project_root: Path) -> list[CodeElement]:
     parent_chain = rel_path
 
     elements = []
+    elements.extend(_extract_variables(root, rel_path, parent_chain))
     elements.extend(_extract_functions(root, rel_path, parent_chain))
     elements.extend(_extract_classes(root, rel_path, parent_chain))
 

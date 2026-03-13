@@ -97,3 +97,49 @@ def test_parse_decorated_class(tmp_path):
     classes = [e for e in elements if e.element_type == "class"]
     assert len(classes) == 1
     assert classes[0].element_name == "Point"
+
+
+def test_parse_module_variables(tmp_path):
+    f = tmp_path / "config.py"
+    f.write_text(
+        'MAX_RETRIES = 3\n'
+        'DEFAULT_TIMEOUT: int = 30\n'
+        'API_URL = "https://example.com"\n'
+    )
+
+    elements = parse_file(f, project_root=tmp_path)
+
+    assert len(elements) == 3
+    assert all(e.element_type == "variable" for e in elements)
+    names = [e.element_name for e in elements]
+    assert "MAX_RETRIES" in names
+    assert "DEFAULT_TIMEOUT" in names
+    assert "API_URL" in names
+
+    max_r = [e for e in elements if e.element_name == "MAX_RETRIES"][0]
+    assert max_r.signature == "MAX_RETRIES = 3"
+    assert max_r.parent_chain == "config.py"
+
+
+def test_parse_full_file(tmp_path):
+    """Test parsing a file with functions, classes, and variables."""
+    f = tmp_path / "mixed.py"
+    f.write_text(
+        'VERSION = "1.0"\n'
+        '\n'
+        'def helper():\n'
+        '    pass\n'
+        '\n'
+        'class Service:\n'
+        '    def run(self):\n'
+        '        pass\n'
+    )
+
+    elements = parse_file(f, project_root=tmp_path)
+
+    types = [e.element_type for e in elements]
+    assert "variable" in types
+    assert "function" in types
+    assert "class" in types
+    assert "method" in types
+    assert len(elements) == 4
