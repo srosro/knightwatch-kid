@@ -8,23 +8,51 @@ from pathlib import Path
 
 from keepitdry import embeddings as embed_module
 from keepitdry.parser import parse_file, chunk_elements
+from keepitdry.swift_parser import parse_swift_file
 from keepitdry.store import Store
 
 SKIP_DIRS = frozenset({
     ".keepitdry", "__pycache__", "node_modules", ".venv",
     ".git", ".tox", ".mypy_cache", ".pytest_cache",
+    # Swift / Xcode build artifacts
+    ".build", "DerivedData", "Pods", "xcuserdata", ".swiftpm",
 })
 
+LANGUAGE_BY_EXT = {".py": "python", ".swift": "swift"}
 
-def discover_python_files(root: Path) -> list[Path]:
-    """Find all .py files under root, skipping excluded directories."""
+PARSERS = {
+    "python": parse_file,
+    "swift": parse_swift_file,
+}
+
+
+def _discover_files_for_ext(root: Path, ext: str) -> list[Path]:
     files = []
-    for path in sorted(root.rglob("*.py")):
+    for path in sorted(root.rglob(f"*{ext}")):
         rel_parts = path.relative_to(root).parts
         if any(part in SKIP_DIRS for part in rel_parts):
             continue
         files.append(path)
     return files
+
+
+def discover_python_files(root: Path) -> list[Path]:
+    """Find all .py files under root, skipping excluded directories."""
+    return _discover_files_for_ext(root, ".py")
+
+
+def discover_swift_files(root: Path) -> list[Path]:
+    """Find all .swift files under root, skipping excluded directories."""
+    return _discover_files_for_ext(root, ".swift")
+
+
+def discover_source_files(root: Path) -> list[tuple[Path, str]]:
+    """Find all indexable source files, pairing each with its language label."""
+    out: list[tuple[Path, str]] = []
+    for ext, lang in LANGUAGE_BY_EXT.items():
+        for f in _discover_files_for_ext(root, ext):
+            out.append((f, lang))
+    return out
 
 
 class FileHashTracker:
@@ -82,9 +110,9 @@ class Indexer:
         if clear:
             self.clear()
 
-        py_files = discover_python_files(self.root)
+        source_files = discover_source_files(self.root)
         # Keys are relative paths (matching how tracker stores them)
-        current_keys = {str(f.relative_to(self.root)) for f in py_files}
+        current_keys = {str(f.relative_to(self.root)) for f, _lang in source_files}
 
         # Remove stale entries
         stale = self._tracker.stale_files(current_keys)
@@ -96,19 +124,20 @@ class Indexer:
         files_skipped = 0
         total_elements = 0
 
-        for py_file in py_files:
-            if not self._tracker.has_changed(py_file):
+        for src_file, lang in source_files:
+            if not self._tracker.has_changed(src_file):
                 files_skipped += 1
                 continue
 
-            elements = parse_file(py_file, project_root=self.root)
+            parser = PARSERS[lang]
+            elements = parser(src_file, project_root=self.root)
             elements = chunk_elements(elements)
 
             if not elements:
-                self._tracker.update(py_file)
+                self._tracker.update(src_file)
                 continue
 
-            rel_path = str(py_file.relative_to(self.root))
+            rel_path = str(src_file.relative_to(self.root))
             self.store.delete_by_file(rel_path)
 
             texts = [embed_module.build_searchable_text(el) for el in elements]
@@ -123,6 +152,7 @@ class Indexer:
                     "line_number": el.line_number,
                     "parent_chain": el.parent_chain,
                     "signature": el.signature,
+                    "language": lang,
                 }
                 for el in elements
             ]
@@ -135,7 +165,7 @@ class Indexer:
                 documents=documents,
             )
 
-            self._tracker.update(py_file)
+            self._tracker.update(src_file)
             files_indexed += 1
             total_elements += len(elements)
 

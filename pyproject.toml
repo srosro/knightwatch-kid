@@ -5,6 +5,7 @@ requires-python = ">=3.11"
 dependencies = [
     "tree-sitter>=0.21",
     "tree-sitter-python>=0.21",
+    "tree-sitter-swift>=0.0.1",
     "chromadb>=0.4",
     "requests>=2.31",
     "click>=8.0",

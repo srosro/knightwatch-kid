@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json as _json
 from pathlib import Path
 
 import click
@@ -42,7 +43,9 @@ def index(project: Path, clear: bool):
 @click.option("--limit", default=5, help="Max results.")
 @click.option("--type", "element_type", default=None, help="Filter by element type.")
 @click.option("--file", "file_path", default=None, help="Filter by file path.")
-def find(query: str, project: Path, limit: int, element_type: str | None, file_path: str | None):
+@click.option("--json", "as_json", is_flag=True, help="Emit results as a JSON array.")
+def find(query: str, project: Path, limit: int, element_type: str | None,
+         file_path: str | None, as_json: bool):
     """Search for similar code elements."""
     project = Path(project).resolve()
     embed_module.check_ollama()
@@ -54,6 +57,10 @@ def find(query: str, project: Path, limit: int, element_type: str | None, file_p
         element_type=element_type,
         file_path=file_path,
     )
+
+    if as_json:
+        click.echo(_json.dumps(results))
+        return
 
     if not results:
         click.echo("No results found.")
