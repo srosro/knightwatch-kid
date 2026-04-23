@@ -34,6 +34,9 @@ MAX_BLOCKS = 20
 MAX_MATCHES_PER_BLOCK = 5
 SCORE_FLOOR = 0.70
 KID_TIMEOUT_SECS = 15
+# mxbai-embed-large has a 512-token context. Dense code ≈ 1.7 chars/token.
+# keepitdry's indexer truncates to 900 chars; querying does not — match that.
+_MAX_QUERY_CHARS = 900
 
 SUPPORTED_EXTS = (".py", ".swift")
 
@@ -132,6 +135,8 @@ def _filter_blocks(blocks: list[Block]) -> list[Block]:
 
 def _query_kid(text: str) -> list[dict]:
     """Run `kid find --json` and return hits. Raises on any failure."""
+    if len(text) > _MAX_QUERY_CHARS:
+        text = text[:_MAX_QUERY_CHARS]
     proc = subprocess.run(
         [KID_BIN, "find", "--project", KID_PROJECT, "--json",
          "--limit", str(MAX_MATCHES_PER_BLOCK), text],
