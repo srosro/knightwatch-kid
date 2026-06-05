@@ -115,12 +115,13 @@ def test_defaults_when_env_unset(monkeypatch):
         importlib.reload(embeddings)
 
 
-def test_env_overrides_model_and_url_in_request(monkeypatch):
-    """KID_EMBED_MODEL / KID_OLLAMA_URL change the model and host of the actual request."""
+def test_env_overrides_model_url_and_truncation(monkeypatch):
+    """KID_* env vars drive the model + host of the request and the truncation length."""
     import importlib
 
     monkeypatch.setenv("KID_EMBED_MODEL", "qwen3-embedding:8b")
     monkeypatch.setenv("KID_OLLAMA_URL", "http://gpu.local:11434")
+    monkeypatch.setenv("KID_MAX_EMBED_CHARS", "50")
     from keepitdry import embeddings
 
     importlib.reload(embeddings)
@@ -132,5 +133,17 @@ def test_env_overrides_model_and_url_in_request(monkeypatch):
         url, *_ = mock_post.call_args.args
         assert url == "http://gpu.local:11434/api/embed"
         assert mock_post.call_args.kwargs["json"]["model"] == "qwen3-embedding:8b"
+
+        el = CodeElement(
+            file_path="f.py",
+            element_name="big",
+            element_type="function",
+            signature="def big()",
+            docstring=None,
+            code_body="x" * 500,
+            line_number=1,
+            parent_chain="f.py",
+        )
+        assert len(embeddings.build_searchable_text(el)) == 50
     finally:
         importlib.reload(embeddings)
