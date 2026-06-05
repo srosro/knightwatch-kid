@@ -1,16 +1,30 @@
-"""Ollama embedding client for mxbai-embed-large."""
+"""Ollama embedding client.
+
+Model and endpoint are configurable via environment variables so each host can
+point at its own Ollama and pick a model that fits its hardware:
+
+- ``KID_EMBED_MODEL``     embedding model (default ``mxbai-embed-large``)
+- ``KID_OLLAMA_URL``      Ollama base URL (default ``http://localhost:11434``)
+- ``KID_MAX_EMBED_CHARS`` per-element input truncation (default ``900``)
+
+The vector dimension is inferred from the model at index time, so switching
+``KID_EMBED_MODEL`` to a model with a different dimension requires re-indexing.
+"""
 
 from __future__ import annotations
+
+import os
 
 import requests
 
 from keepitdry.parser import CodeElement
 
-OLLAMA_BASE_URL = "http://localhost:11434"
-MODEL = "mxbai-embed-large"
-EMBEDDING_DIM = 1024
-# mxbai-embed-large has a 512-token context. Code tokenizes at ~3 chars/token.
-_MAX_EMBED_CHARS = 1400
+OLLAMA_BASE_URL = os.environ.get("KID_OLLAMA_URL", "http://localhost:11434")
+MODEL = os.environ.get("KID_EMBED_MODEL", "mxbai-embed-large")
+# Truncate per-element input to the model's context. Dense code tokenizes near
+# 1.7 chars/token; the 900 default suits mxbai-embed-large's 512-token context.
+# Raise it (e.g. KID_MAX_EMBED_CHARS) for longer-context models like qwen3.
+_MAX_EMBED_CHARS = int(os.environ.get("KID_MAX_EMBED_CHARS", "900"))
 
 
 def build_searchable_text(element: CodeElement) -> str:
