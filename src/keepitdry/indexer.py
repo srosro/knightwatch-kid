@@ -180,11 +180,13 @@ class Indexer:
 
     def clear(self) -> None:
         self.store.clear()
-        self._tracker = FileHashTracker(
-            self.db_path / "file_hashes.json", project_root=self.root
-        )
-        if (self.db_path / "file_hashes.json").exists():
-            (self.db_path / "file_hashes.json").unlink()
+        # Delete the hashes file BEFORE constructing the tracker — otherwise the
+        # tracker loads the old hashes into memory and a subsequent index(clear=True)
+        # skips every "unchanged" file, leaving an incomplete rebuild.
+        hashes_file = self.db_path / "file_hashes.json"
+        if hashes_file.exists():
+            hashes_file.unlink()
+        self._tracker = FileHashTracker(hashes_file, project_root=self.root)
 
     def stats(self) -> dict:
         return {

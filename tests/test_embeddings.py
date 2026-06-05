@@ -97,3 +97,53 @@ def test_batch_embed():
         assert len(vecs) == 3
         assert all(len(v) == 1024 for v in vecs)
         mock_post.assert_called_once()
+
+
+def test_defaults_when_env_unset(monkeypatch):
+    """With no env overrides, the model and endpoint match the documented defaults."""
+    import importlib
+
+    for var in ("KID_EMBED_MODEL", "KID_OLLAMA_URL", "KID_MAX_EMBED_CHARS"):
+        monkeypatch.delenv(var, raising=False)
+    from keepitdry import embeddings
+
+    importlib.reload(embeddings)
+    try:
+        assert embeddings.MODEL == "mxbai-embed-large"
+        assert embeddings.OLLAMA_BASE_URL == "http://localhost:11434"
+    finally:
+        importlib.reload(embeddings)
+
+
+def test_env_overrides_model_url_and_truncation(monkeypatch):
+    """KID_* env vars drive the model + host of the request and the truncation length."""
+    import importlib
+
+    monkeypatch.setenv("KID_EMBED_MODEL", "qwen3-embedding:8b")
+    monkeypatch.setenv("KID_OLLAMA_URL", "http://gpu.local:11434")
+    monkeypatch.setenv("KID_MAX_EMBED_CHARS", "50")
+    from keepitdry import embeddings
+
+    importlib.reload(embeddings)
+    try:
+        with patch("keepitdry.embeddings.requests.post") as mock_post:
+            mock_post.return_value = _mock_embed_response(["x"], dim=4096)
+            vec = embeddings.embed("x")
+        assert len(vec) == 4096
+        url, *_ = mock_post.call_args.args
+        assert url == "http://gpu.local:11434/api/embed"
+        assert mock_post.call_args.kwargs["json"]["model"] == "qwen3-embedding:8b"
+
+        el = CodeElement(
+            file_path="f.py",
+            element_name="big",
+            element_type="function",
+            signature="def big()",
+            docstring=None,
+            code_body="x" * 500,
+            line_number=1,
+            parent_chain="f.py",
+        )
+        assert len(embeddings.build_searchable_text(el)) == 50
+    finally:
+        importlib.reload(embeddings)
