@@ -172,3 +172,27 @@ def test_indexer_clear(tmp_path, fake_embed):
         indexer.clear()
 
     assert indexer.store.count() == 0
+
+
+def test_index_clear_forces_full_reindex(tmp_path, fake_embed):
+    """index(clear=True) must re-embed every file, not skip them via the stale hash tracker.
+
+    Regression: clear() used to load the old file_hashes.json into the new tracker
+    before deleting it, so a --clear rebuild silently skipped all unchanged files and
+    left an incomplete index — which broke the model-switch path (re-index at a new
+    embedding dimension)."""
+    (tmp_path / "a.py").write_text("def a():\n    return 1\n")
+    (tmp_path / "b.py").write_text("def b():\n    return 2\n")
+
+    with patch("keepitdry.indexer.embed_module.batch_embed") as mock_embed:
+        mock_embed.side_effect = lambda texts: [fake_embed(t) for t in texts]
+
+        indexer = Indexer(tmp_path)
+        indexer.index()
+        count_before = indexer.store.count()
+
+        stats = indexer.index(clear=True)
+
+    assert stats["files_skipped"] == 0
+    assert stats["files_indexed"] == 2
+    assert indexer.store.count() == count_before
