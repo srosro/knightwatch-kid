@@ -16,7 +16,7 @@ Before writing any new function, class, or significant code block:
 
 ## Setup
 
-Requires `kid` CLI installed (`pip install keepitdry`) and Ollama running locally with `mxbai-embed-large`.
+Requires `kid` CLI installed (`pip install keepitdry`) and Ollama running locally with `qwen3-embedding:8b`.
 
 ## Commands
 

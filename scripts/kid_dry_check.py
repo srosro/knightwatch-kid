@@ -34,8 +34,10 @@ MAX_BLOCKS = 20
 MAX_MATCHES_PER_BLOCK = 5
 SCORE_FLOOR = 0.70
 KID_TIMEOUT_SECS = 15
-# mxbai-embed-large has a 512-token context. Dense code ≈ 1.7 chars/token.
-# keepitdry's indexer truncates to 900 chars; querying does not — match that.
+# Conservative cap on query length; qwen3-embedding:8b has a ~32K-token context
+# (mxbai-embed-large was 512), so this is a safety bound, not a model limit. The
+# index-time cap is _MAX_EMBED_CHARS in embeddings.py; the two are not currently
+# aligned (1400 vs 900) — aligning/raising them is a follow-up.
 _MAX_QUERY_CHARS = 900
 
 SUPPORTED_EXTS = (".py", ".swift")

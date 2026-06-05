@@ -1,4 +1,4 @@
-"""Ollama embedding client for mxbai-embed-large."""
+"""Ollama embedding client for qwen3-embedding:8b."""
 
 from __future__ import annotations
 
@@ -7,9 +7,13 @@ import requests
 from keepitdry.parser import CodeElement
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-MODEL = "mxbai-embed-large"
-EMBEDDING_DIM = 1024
-# mxbai-embed-large has a 512-token context. Code tokenizes at ~3 chars/token.
+MODEL = "qwen3-embedding:8b"
+EMBEDDING_DIM = 4096  # qwen3-embedding:8b native dimension
+# qwen3-embedding:8b has a ~32K-token context, so this cap is a loose safety
+# bound rather than a hard context limit (mxbai-embed-large was 512 tokens).
+# Kept in sync with the query-time cap in scripts/kid_dry_check.py; raising it
+# to exploit qwen3's long context is a deliberate follow-up, not part of the
+# model swap.
 _MAX_EMBED_CHARS = 1400
 
 

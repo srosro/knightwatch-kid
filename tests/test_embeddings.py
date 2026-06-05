@@ -8,6 +8,7 @@ from keepitdry.embeddings import (
     embed,
     batch_embed,
     check_ollama,
+    EMBEDDING_DIM,
     OllamaError,
 )
 from keepitdry.parser import CodeElement
@@ -53,7 +54,7 @@ def test_build_searchable_text_no_docstring():
     assert "None" not in text
 
 
-def _mock_embed_response(texts=None, dim=1024):
+def _mock_embed_response(texts=None, dim=EMBEDDING_DIM):
     """Create a mock response for Ollama /api/embed endpoint."""
     count = len(texts) if texts else 1
     resp = Mock()
@@ -82,7 +83,7 @@ def test_embed_single():
 
         vec = embed("hello world")
 
-        assert len(vec) == 1024
+        assert len(vec) == EMBEDDING_DIM
         assert all(isinstance(v, float) for v in vec)
         mock_post.assert_called_once()
 
@@ -95,5 +96,5 @@ def test_batch_embed():
         vecs = batch_embed(texts)
 
         assert len(vecs) == 3
-        assert all(len(v) == 1024 for v in vecs)
+        assert all(len(v) == EMBEDDING_DIM for v in vecs)
         mock_post.assert_called_once()

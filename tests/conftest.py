@@ -31,10 +31,11 @@ def tmp_project(tmp_path):
 def fake_embed():
     """Return a function that produces deterministic fake embeddings."""
     def _embed(text: str) -> list[float]:
-        # Deterministic: hash-based, 1024-dim
+        # Deterministic: hash-based, EMBEDDING_DIM floats
         import hashlib
+        from keepitdry.embeddings import EMBEDDING_DIM
         h = hashlib.sha256(text.encode()).digest()
-        # Extend to 1024 floats by repeating hash
-        raw = (h * 32)[:1024]
+        # Repeat the 32-byte digest enough times to cover EMBEDDING_DIM
+        raw = (h * (EMBEDDING_DIM // len(h) + 1))[:EMBEDDING_DIM]
         return [float(b) / 255.0 for b in raw]
     return _embed
