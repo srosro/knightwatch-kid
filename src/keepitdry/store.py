@@ -10,6 +10,9 @@ from keepitdry.embeddings import EMBEDDING_DIM
 
 
 COLLECTION_NAME = "keepitdry"
+# Incremental-index tracker file the indexer keeps alongside the collection.
+# Owned here too so a rebuild can invalidate it (see Store.__init__).
+HASHES_FILENAME = "file_hashes.json"
 
 
 def _collection_metadata() -> dict:
@@ -23,18 +26,21 @@ class Store:
     """Manages a ChromaDB collection for a single project."""
 
     def __init__(self, db_path: Path):
+        self._db_path = db_path
         self._client = chromadb.PersistentClient(path=str(db_path))
         self.collection = self._client.get_or_create_collection(
             name=COLLECTION_NAME,
             metadata=_collection_metadata(),
         )
         # An on-disk collection from an earlier model has vectors of a different
-        # dimension; rebuild it so the new model can index/query cleanly. Callers
-        # that own state beyond the collection (e.g. the indexer's file-hash
-        # tracker) must invalidate it too — see Indexer.__init__.
-        self.rebuilt = self.collection.metadata.get("embedding_dim") != EMBEDDING_DIM
-        if self.rebuilt:
+        # dimension; wipe it so the new model can index/query cleanly. This runs
+        # on whichever path opens the store first (indexer or searcher), so it
+        # also drops the incremental-index tracker — otherwise the next index()
+        # would skip every (unchanged) file and leave the wiped store empty.
+        if self.collection.metadata.get("embedding_dim") != EMBEDDING_DIM:
             self.clear()
+            hashes_path = db_path / HASHES_FILENAME
+            hashes_path.unlink(missing_ok=True)
 
     def upsert(
         self,

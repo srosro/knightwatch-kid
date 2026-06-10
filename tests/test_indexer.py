@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+import pytest
+
 from keepitdry import store as store_module
 from keepitdry.indexer import discover_python_files, FileHashTracker, Indexer
 
@@ -160,7 +162,8 @@ def test_indexer_removes_stale_entries(tmp_path, fake_embed):
     assert indexer.store.count() == 0
 
 
-def test_indexer_reindexes_after_dimension_change(tmp_path, fake_embed, monkeypatch):
+@pytest.mark.parametrize("read_path_first", [False, True])
+def test_indexer_reindexes_after_dimension_change(tmp_path, fake_embed, monkeypatch, read_path_first):
     (tmp_path / "app.py").write_text("def hello():\n    return 'hi'\n")
 
     with patch("keepitdry.indexer.embed_module.batch_embed") as mock_embed:
@@ -168,11 +171,15 @@ def test_indexer_reindexes_after_dimension_change(tmp_path, fake_embed, monkeypa
 
         Indexer(tmp_path).index()
 
-        # Simulate a model swap to a different embedding dimension. Re-opening
-        # the indexer must wipe the stale collection AND invalidate the
-        # file-hash tracker, so the next index() actually re-embeds every file
-        # rather than skipping them and leaving the store permanently empty.
+        # Simulate a model swap to a different embedding dimension. Whichever
+        # path opens the store first wipes the stale collection AND drops the
+        # file-hash tracker, so the next index() re-embeds every file rather
+        # than skipping them and leaving the store permanently empty. The
+        # read_path_first param exercises a `kid search` opening the store
+        # before the indexer (the one-shot-rebuild regression).
         monkeypatch.setattr(store_module, "EMBEDDING_DIM", store_module.EMBEDDING_DIM // 2)
+        if read_path_first:
+            store_module.Store(tmp_path / ".keepitdry")
 
         indexer = Indexer(tmp_path)
         assert indexer.store.count() == 0

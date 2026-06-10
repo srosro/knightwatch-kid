@@ -9,7 +9,7 @@ from pathlib import Path
 from keepitdry import embeddings as embed_module
 from keepitdry.parser import parse_file, chunk_elements
 from keepitdry.swift_parser import parse_swift_file
-from keepitdry.store import Store
+from keepitdry.store import HASHES_FILENAME, Store
 
 SKIP_DIRS = frozenset({
     ".keepitdry", "__pycache__", "node_modules", ".venv",
@@ -101,15 +101,12 @@ class Indexer:
     def __init__(self, project_root: Path):
         self.root = project_root
         self.db_path = project_root / ".keepitdry"
+        # Store wipes its collection (and the tracker file below) on an
+        # embedding-dimension change, so construct it before the tracker.
         self.store = Store(self.db_path)
-        hashes_path = self.db_path / "file_hashes.json"
-        # If the store rebuilt its collection (embedding-dimension change), the
-        # file-hash tracker is now stale: every file would look "unchanged" and
-        # be skipped, leaving the wiped collection permanently empty. Drop it so
-        # the next index() re-embeds everything.
-        if self.store.rebuilt and hashes_path.exists():
-            hashes_path.unlink()
-        self._tracker = FileHashTracker(hashes_path, project_root=self.root)
+        self._tracker = FileHashTracker(
+            self.db_path / HASHES_FILENAME, project_root=self.root
+        )
 
     def index(self, clear: bool = False) -> dict:
         if clear:
@@ -185,11 +182,10 @@ class Indexer:
 
     def clear(self) -> None:
         self.store.clear()
+        (self.db_path / HASHES_FILENAME).unlink(missing_ok=True)
         self._tracker = FileHashTracker(
-            self.db_path / "file_hashes.json", project_root=self.root
+            self.db_path / HASHES_FILENAME, project_root=self.root
         )
-        if (self.db_path / "file_hashes.json").exists():
-            (self.db_path / "file_hashes.json").unlink()
 
     def stats(self) -> dict:
         return {
