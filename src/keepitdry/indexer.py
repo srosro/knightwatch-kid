@@ -102,9 +102,14 @@ class Indexer:
         self.root = project_root
         self.db_path = project_root / ".keepitdry"
         self.store = Store(self.db_path)
-        self._tracker = FileHashTracker(
-            self.db_path / "file_hashes.json", project_root=self.root
-        )
+        hashes_path = self.db_path / "file_hashes.json"
+        # If the store rebuilt its collection (embedding-dimension change), the
+        # file-hash tracker is now stale: every file would look "unchanged" and
+        # be skipped, leaving the wiped collection permanently empty. Drop it so
+        # the next index() re-embeds everything.
+        if self.store.rebuilt and hashes_path.exists():
+            hashes_path.unlink()
+        self._tracker = FileHashTracker(hashes_path, project_root=self.root)
 
     def index(self, clear: bool = False) -> dict:
         if clear:

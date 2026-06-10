@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+from keepitdry import store as store_module
 from keepitdry.indexer import discover_python_files, FileHashTracker, Indexer
 
 
@@ -157,6 +158,29 @@ def test_indexer_removes_stale_entries(tmp_path, fake_embed):
 
     assert stats["stale_removed"] > 0
     assert indexer.store.count() == 0
+
+
+def test_indexer_reindexes_after_dimension_change(tmp_path, fake_embed, monkeypatch):
+    (tmp_path / "app.py").write_text("def hello():\n    return 'hi'\n")
+
+    with patch("keepitdry.indexer.embed_module.batch_embed") as mock_embed:
+        mock_embed.side_effect = lambda texts: [fake_embed(t) for t in texts]
+
+        Indexer(tmp_path).index()
+
+        # Simulate a model swap to a different embedding dimension. Re-opening
+        # the indexer must wipe the stale collection AND invalidate the
+        # file-hash tracker, so the next index() actually re-embeds every file
+        # rather than skipping them and leaving the store permanently empty.
+        monkeypatch.setattr(store_module, "EMBEDDING_DIM", store_module.EMBEDDING_DIM // 2)
+
+        indexer = Indexer(tmp_path)
+        assert indexer.store.count() == 0
+        stats = indexer.index()
+
+    assert stats["files_indexed"] == 1
+    assert stats["files_skipped"] == 0
+    assert indexer.store.count() > 0
 
 
 def test_indexer_clear(tmp_path, fake_embed):

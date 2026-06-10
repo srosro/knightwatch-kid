@@ -29,8 +29,11 @@ class Store:
             metadata=_collection_metadata(),
         )
         # An on-disk collection from an earlier model has vectors of a different
-        # dimension; rebuild it so the new model can index/query cleanly.
-        if self.collection.metadata.get("embedding_dim") != EMBEDDING_DIM:
+        # dimension; rebuild it so the new model can index/query cleanly. Callers
+        # that own state beyond the collection (e.g. the indexer's file-hash
+        # tracker) must invalidate it too — see Indexer.__init__.
+        self.rebuilt = self.collection.metadata.get("embedding_dim") != EMBEDDING_DIM
+        if self.rebuilt:
             self.clear()
 
     def upsert(
