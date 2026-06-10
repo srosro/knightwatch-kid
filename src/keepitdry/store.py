@@ -6,8 +6,17 @@ from pathlib import Path
 
 import chromadb
 
+from keepitdry.embeddings import EMBEDDING_DIM
+
 
 COLLECTION_NAME = "keepitdry"
+
+
+def _collection_metadata() -> dict:
+    # Stamp the embedding dimension so a model swap can detect and rebuild a
+    # collection persisted with vectors of a different dimension, rather than
+    # crashing on the first upsert/query with a hard dimension mismatch.
+    return {"hnsw:space": "cosine", "embedding_dim": EMBEDDING_DIM}
 
 
 class Store:
@@ -17,8 +26,12 @@ class Store:
         self._client = chromadb.PersistentClient(path=str(db_path))
         self.collection = self._client.get_or_create_collection(
             name=COLLECTION_NAME,
-            metadata={"hnsw:space": "cosine"},
+            metadata=_collection_metadata(),
         )
+        # An on-disk collection from an earlier model has vectors of a different
+        # dimension; rebuild it so the new model can index/query cleanly.
+        if self.collection.metadata.get("embedding_dim") != EMBEDDING_DIM:
+            self.clear()
 
     def upsert(
         self,
@@ -80,5 +93,5 @@ class Store:
         self._client.delete_collection(COLLECTION_NAME)
         self.collection = self._client.get_or_create_collection(
             name=COLLECTION_NAME,
-            metadata={"hnsw:space": "cosine"},
+            metadata=_collection_metadata(),
         )

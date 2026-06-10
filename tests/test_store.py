@@ -1,9 +1,27 @@
+from keepitdry import store as store_module
 from keepitdry.store import Store
 
 
 def test_store_init(tmp_path):
     store = Store(tmp_path / ".keepitdry")
     assert store.collection is not None
+
+
+def test_store_rebuilds_on_dimension_change(tmp_path, fake_embed, monkeypatch):
+    db_path = tmp_path / ".keepitdry"
+    meta = {"file_path": "a.py", "element_type": "function", "element_name": "foo", "line_number": 1}
+
+    store = Store(db_path)
+    store.upsert(ids=["e1"], embeddings=[fake_embed("x")], metadatas=[meta], documents=["code"])
+    assert store.count() == 1
+
+    # Simulate a model swap to a different embedding dimension. Re-opening the
+    # persisted collection should detect the stale dimension and rebuild it
+    # rather than leaving incompatible vectors that crash the next upsert/query.
+    monkeypatch.setattr(store_module, "EMBEDDING_DIM", store_module.EMBEDDING_DIM // 2)
+
+    reopened = Store(db_path)
+    assert reopened.count() == 0
 
 
 def test_store_upsert_and_count(tmp_path, fake_embed):
