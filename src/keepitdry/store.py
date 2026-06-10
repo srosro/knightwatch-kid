@@ -26,7 +26,6 @@ class Store:
     """Manages a ChromaDB collection for a single project."""
 
     def __init__(self, db_path: Path):
-        self._db_path = db_path
         self._client = chromadb.PersistentClient(path=str(db_path))
         self.collection = self._client.get_or_create_collection(
             name=COLLECTION_NAME,
@@ -39,8 +38,7 @@ class Store:
         # would skip every (unchanged) file and leave the wiped store empty.
         if self.collection.metadata.get("embedding_dim") != EMBEDDING_DIM:
             self.clear()
-            hashes_path = db_path / HASHES_FILENAME
-            hashes_path.unlink(missing_ok=True)
+            (db_path / HASHES_FILENAME).unlink(missing_ok=True)
 
     def upsert(
         self,
