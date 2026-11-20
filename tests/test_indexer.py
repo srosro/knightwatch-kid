@@ -196,3 +196,43 @@ def test_index_clear_forces_full_reindex(tmp_path, fake_embed):
     assert stats["files_skipped"] == 0
     assert stats["files_indexed"] == 2
     assert indexer.store.count() == count_before
+
+
+def test_indexer_keeps_same_name_same_line_elements(tmp_path, fake_embed):
+    """Two assignments to one name on one line are distinct elements; indexing
+    must store both rather than abort the run on a duplicate id."""
+    (tmp_path / "app.py").write_text("pp = 1; pp = [1, 2, 3]\n")
+
+    with patch("keepitdry.indexer.embed_module.batch_embed") as mock_embed:
+        mock_embed.side_effect = lambda texts: [fake_embed(t) for t in texts]
+
+        indexer = Indexer(tmp_path)
+        stats = indexer.index()
+
+    assert stats["elements_indexed"] == 2
+    assert indexer.store.count() == 2
+
+
+def test_interrupted_index_resumes_without_reembedding_finished_files(tmp_path, fake_embed):
+    """A run that dies partway keeps the files it finished, so the next run
+    only embeds what is left."""
+    (tmp_path / "a.py").write_text("def a():\n    return 1\n")
+    (tmp_path / "b.py").write_text("def b():\n    return 2\n")
+
+    def embed_until_b(texts):
+        if any("def b" in t for t in texts):
+            raise RuntimeError("killed mid-run")
+        return [fake_embed(t) for t in texts]
+
+    with patch("keepitdry.indexer.embed_module.batch_embed") as mock_embed:
+        mock_embed.side_effect = embed_until_b
+        try:
+            Indexer(tmp_path).index()
+        except RuntimeError:
+            pass
+
+        mock_embed.side_effect = lambda texts: [fake_embed(t) for t in texts]
+        stats = Indexer(tmp_path).index()
+
+    assert stats["files_skipped"] == 1
+    assert stats["files_indexed"] == 1
