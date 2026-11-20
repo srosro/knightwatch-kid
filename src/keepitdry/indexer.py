@@ -135,6 +135,7 @@ class Indexer:
 
             if not elements:
                 self._tracker.update(src_file)
+                self._tracker.save()
                 continue
 
             rel_path = str(src_file.relative_to(self.root))
@@ -143,7 +144,14 @@ class Indexer:
             texts = [embed_module.build_searchable_text(el) for el in elements]
             embeddings = embed_module.batch_embed(texts)
 
-            ids = [f"{el.file_path}::{el.element_name}::{el.line_number}" for el in elements]
+            # One name can be bound twice on one line (`x = 1; x = 2`): suffix
+            # repeats so every element keeps its own id.
+            ids: list[str] = []
+            seen: dict[str, int] = {}
+            for el in elements:
+                base = f"{el.file_path}::{el.element_name}::{el.line_number}"
+                seen[base] = seen.get(base, 0) + 1
+                ids.append(base if seen[base] == 1 else f"{base}#{seen[base]}")
             metadatas = [
                 {
                     "file_path": el.file_path,
@@ -165,7 +173,9 @@ class Indexer:
                 documents=documents,
             )
 
+            # Persist per file so a run killed partway resumes where it stopped.
             self._tracker.update(src_file)
+            self._tracker.save()
             files_indexed += 1
             total_elements += len(elements)
 
